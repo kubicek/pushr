@@ -4,7 +4,7 @@ require 'yaml'
 require 'logger'
 
 # = Pushr
-# Deploy Rails applications by Github Post-Receive URLs launching Capistrano's commands
+# Deploy applications by git hook Post-Receive URLs launching git's commands
 
 CONFIG = YAML.load_file( File.join(File.dirname(__FILE__), 'config.yml') ) unless defined? CONFIG
 
@@ -95,7 +95,7 @@ module Pushr
     end
 
     def info
-      info = `cd #{@path}/current; git log --pretty=format:'%h --|-- %s --|-- %an --|-- %ar --|-- %ci' -n 1`
+      info = `cd #{@path}; git log --pretty=format:'%h --|-- %s --|-- %an --|-- %ar --|-- %ci' -n 1`
       @info ||= Struct::Info.new( *info.split(/\s{1}--\|--\s{1}/) )
     end
 
@@ -106,8 +106,9 @@ module Pushr
 
     def uptodate?
       log.info('Pushr') { "Fetching new revisions from remote..." }
-      info = `cd #{@path}/shared/cached-copy; git fetch -q origin 2>&1`
-      log.fatal('git fetch -q origin') { "Error while checking if app up-to-date: #{info}" } and return false unless $?.success?
+      git_remote = CONFIG['git_remote'] || 'origin'
+      info = `cd #{@path}; git fetch -q #{git_remote} 2>&1`
+      log.fatal("git fetch -q #{git_remote}") { "Error while checking if app up-to-date: #{info}" } and return false unless $?.success?
       return info.strip == '' # Blank output => No updates from git remote
     end
 
@@ -118,7 +119,7 @@ module Pushr
 
     include Logger
 
-    attr_reader :path, :application, :repository, :success, :cap_output
+    attr_reader :path, :application, :repository, :success, :git_output
 
     def initialize(path)
       log.fatal('Pushr.new') { "Path not valid: #{path}" } and raise ArgumentError, "File not found: #{path}" unless File.exists?(path)
@@ -132,9 +133,10 @@ module Pushr
       if repository.uptodate? # Do not deploy if up-to-date (eg. push was to other branch) ...
         log.info('Pushr') { "No updates for application found" } and return {:@success => false, :output => 'Application is uptodate'}
       end unless force == 'true' # ... unless forced from web GUI
-      cap_command = CONFIG['cap_command'] || 'deploy:migrations'
+      git_remote = CONFIG['git_remote'] || 'origin'
+      git_branch = CONFIG['git_remote'] || 'master'
       log.info(application) { "Deployment #{"(force) " if force == 'true' }starting..." }
-      @cap_output  = %x[cd #{path}/shared/cached-copy; cap #{cap_command} 2>&1]
+      @git_output  = %x[cd #{path} && git fetch && git reset --hard #{git_remote}/#{git_branch} 2>&1]
       @success     = $?.success?
       @repository.reload!  # Update repository info (after deploy)
       log_deploy_result
@@ -145,11 +147,11 @@ module Pushr
 
     def log_deploy_result
       if @success
-        log.info('[SUCCESS]')   { "Successfuly deployed application with revision #{repository.info.revision} (#{repository.info.message}). Capistrano output:" }
-        log.info('Capistrano')  { @cap_output.to_s }
+        log.info('[SUCCESS]')   { "Successfuly deployed application with revision #{repository.info.revision} (#{repository.info.message}). Git output:" }
+        log.info('Git')  { @git_output.to_s }
       else
-        log.warn('[FAILURE]')   { "Error when deploying application! Check Capistrano output below:" }
-        log.warn('Capistrano')  { @cap_output.to_s }
+        log.warn('[FAILURE]')   { "Error when deploying application! Check Git output below:" }
+        log.warn('Git')  { @git_output.to_s }
       end
     end
 
@@ -266,7 +268,7 @@ __END__
       %p
         %input{ 'type' => 'submit', 'value' => 'Return to index' }
     %pre
-      = @pushr.cap_output
+      = @pushr.git_output
 - else
   %div.failure
     %h2
@@ -275,7 +277,7 @@ __END__
       %p
         %input{ 'type' => 'submit', 'value' => 'Return to index' }
     %pre
-      = @pushr.cap_output
+      = @pushr.git_output
 
 @@ style
 body

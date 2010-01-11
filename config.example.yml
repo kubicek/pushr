@@ -5,11 +5,14 @@ application: Awesome
 username: ~
 password: ~
 
-# * Full path to your Rails application, eg. "/var/www/my_rails_app"
+# * Full path to your application, eg. "/var/www/my_rails_app"
 path:  ~
 
-# * Capistrano command (defaults to `cap deploy:migrations` if not set)
-cap_command: ~
+# * Git remote (defaults to `origin` if not set)
+git_remote: ~
+
+# * Git branch (defaults to `master` if not set)
+git_branch: ~
 
 # * Setup notifications (http://github.com/karmi/pushr_notifiers)
 # notifiers_path: "../somewhere/else" # Set this if your notifiers are not in ../pushr_notifiers
